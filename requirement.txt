@@ -1,4 +1,4 @@
 allocine-seances
 requests
-pandas
 supabase
+python-dotenv

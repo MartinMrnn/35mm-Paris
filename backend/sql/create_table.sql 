@@ -1,0 +1,62 @@
+create table movies (
+    id int primary key,
+    title text not null,
+    original_title text,
+    synopsis text,
+    poster_url text,
+    runtime int,
+    has_dvd_release boolean default false,
+    is_premiere boolean default false,
+    weekly_outing boolean default false
+);
+
+create table directors (
+    id serial primary key,
+    first_name text,
+    last_name text,
+    unique (first_name, last_name)
+);
+
+create table movie_directors (
+    movie_id int references movies(id) on delete cascade,
+    director_id int references directors(id) on delete cascade,
+    primary key (movie_id, director_id)
+);
+
+create table languages (
+    code text primary key,
+    label text
+);
+
+create table movie_languages (
+    movie_id int references movies(id) on delete cascade,
+    code text references languages(code) on delete cascade,
+    primary key (movie_id, code)
+);
+
+create table releases (
+    id serial primary key,
+    movie_id int references movies(id) on delete cascade,
+    release_name text,
+    release_date date
+);
+
+create table cinemas (
+    id int primary key,
+    name text,
+    address text,
+    city text,
+    zipcode text
+);
+
+create table screenings (
+    id serial primary key,
+    movie_id int references movies(id) on delete cascade,
+    cinema_id int references cinemas(id) on delete cascade,
+    date date not null,
+    constraint unique_screening unique (movie_id, cinema_id, date)
+);
+
+create index idx_screenings_date on screenings(date);
+create index idx_screenings_cinema on screenings(cinema_id);
+create index idx_screenings_movie on screenings(movie_id);
