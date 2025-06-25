@@ -1,7 +1,10 @@
+# Ignore environment files
 venv
 .env
+
+# Ignore macOS system files
 .DS_Store
-__init__.py
-# Ignore Python cache files
-__pycache__/
-*.pyc
+
+# Ignore Python cache directories and compiled files
+**/__pycache__/
+**/*.pyc
