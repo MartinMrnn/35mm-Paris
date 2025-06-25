@@ -1,5 +1,7 @@
 venv
 .env
+.DS_Store
+__init__.py
 # Ignore Python cache files
 __pycache__/
 *.pyc

@@ -2,46 +2,59 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-# 🔧 Ajouter backend/src au path d'import
+# Add backend/src to import path
 sys.path.append(str(Path(__file__).resolve().parent / "backend" / "src"))
 
-from db.insert_logic import insert_movie
+from db.insert_logic import insert_movie, insert_directors, generate_movie_id, parse_runtime
 from allocineAPI.allocineAPI import allocineAPI
 
 def main():
-    print("🎬 Lancement de l'import des films depuis l'API Allociné")
+    print("🎬 Launching movie import from Allociné API")
 
-    # Initialisation de l'API
+    # Init Allociné API
     api = allocineAPI()
 
-    # ID d'un cinéma parisien connu (ex : UGC Gobelins)
+    # Cinema ID (example: UGC Gobelins, Paris)
     cinema_id = "P3757"
     date_str = datetime.today().strftime("%Y-%m-%d")
 
     try:
         movies = api.get_movies(cinema_id, date_str)
     except Exception as e:
-        print(f"❌ Erreur lors de la récupération des films : {e}")
+        print(f"❌ Error fetching movies: {e}")
         return
 
-    print(f"📅 Films du {date_str} pour le cinéma {cinema_id} : {len(movies)} films récupérés")
+    print(f"📅 Movies for {date_str} at cinema {cinema_id} — {len(movies)} found")
 
     inserted, skipped = 0, 0
     for movie in movies:
         if not movie.get("title"):
-            print("⚠️ Film sans titre — ignoré.")
+            print("⚠️ Skipping movie with no title")
             skipped += 1
             continue
+
         try:
-            if insert_movie(movie):
+            # Insert movie or skip if already exists
+            movie_inserted = insert_movie(movie)
+            if movie_inserted:
                 inserted += 1
             else:
                 skipped += 1
+
+            # Always compute movie ID to link directors
+            title = movie.get("title", "")
+            original_title = movie.get("originalTitle", "")
+            runtime = parse_runtime(movie.get("runtime", "0min"))
+            movie_id = generate_movie_id(title, original_title, runtime)
+
+            # Insert directors and link them to movie
+            insert_directors(movie, movie_id)
+
         except Exception as e:
-            print(f"❌ Erreur à l'insertion du film {movie.get('title')}: {e}")
+            print(f"❌ Error processing movie {movie.get('title')}: {e}")
             skipped += 1
 
-    print(f"\n✅ Fin de l'import : {inserted} films insérés, {skipped} ignorés ou déjà présents.")
+    print(f"\n✅ Import complete: {inserted} movies inserted, {skipped} skipped or already present.")
 
 if __name__ == "__main__":
     main()
