@@ -118,3 +118,45 @@ def insert_directors(movie: dict, movie_id: int):
                 "director_id": director_id
             }).execute()
             print(f"🔗 Linked movie {movie_id} to director {director_id}")
+
+def insert_languages(movie: dict, movie_id: int):
+    """
+    Inserts all languages of a movie into the 'languages' table and links them via 'movie_languages'.
+    Handles both list of dicts and list of strings.
+    """
+    languages = movie.get("languages", [])
+    if not languages or not isinstance(languages, list):
+        return
+
+    for lang in languages:
+        if isinstance(lang, dict):
+            code = lang.get("code")
+            label = lang.get("label") or code
+        elif isinstance(lang, str):
+            code = lang
+            label = lang
+        else:
+            continue
+
+        if not code:
+            continue
+
+        # Insert into languages table if not exists
+        exists = supabase.table("languages").select("code", count="exact").eq("code", code).execute()
+        if not exists.count or exists.count == 0:
+            supabase.table("languages").insert({
+                "code": code,
+                "label": label
+            }).execute()
+            print(f"🌐 Inserted language: {code} ({label})")
+
+        # Insert into movie_languages table if not exists
+        link_exists = supabase.table("movie_languages").select("movie_id", count="exact") \
+            .eq("movie_id", movie_id).eq("code", code).execute()
+        if not link_exists.count or link_exists.count == 0:
+            supabase.table("movie_languages").insert({
+                "movie_id": movie_id,
+                "code": code
+            }).execute()
+            print(f"🔗 Linked movie {movie_id} to language {code}")
+

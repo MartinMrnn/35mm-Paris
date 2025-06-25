@@ -5,7 +5,13 @@ from datetime import datetime
 # Add backend/src to import path
 sys.path.append(str(Path(__file__).resolve().parent / "backend" / "src"))
 
-from db.insert_logic import insert_movie, insert_directors, generate_movie_id, parse_runtime
+from db.insert_logic import (
+    insert_movie,
+    insert_directors,
+    insert_languages,
+    generate_movie_id,
+    parse_runtime,
+)
 from allocineAPI.allocineAPI import allocineAPI
 
 def main():
@@ -41,14 +47,15 @@ def main():
             else:
                 skipped += 1
 
-            # Always compute movie ID to link directors
+            # Compute movie_id for relations
             title = movie.get("title", "")
             original_title = movie.get("originalTitle", "")
             runtime = parse_runtime(movie.get("runtime", "0min"))
             movie_id = generate_movie_id(title, original_title, runtime)
 
-            # Insert directors and link them to movie
+            # Insert related data
             insert_directors(movie, movie_id)
+            insert_languages(movie, movie_id)
 
         except Exception as e:
             print(f"❌ Error processing movie {movie.get('title')}: {e}")

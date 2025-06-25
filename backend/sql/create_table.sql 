@@ -54,7 +54,9 @@ create table screenings (
     movie_id int references movies(id) on delete cascade,
     cinema_id int references cinemas(id) on delete cascade,
     date date not null,
-    constraint unique_screening unique (movie_id, cinema_id, date)
+    starts_at time,
+    diffusion_version text,
+    constraint unique_screening unique (movie_id, cinema_id, date, starts_at)
 );
 
 create index idx_screenings_date on screenings(date);
