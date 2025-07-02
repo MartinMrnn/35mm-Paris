@@ -8,3 +8,22 @@ venv
 # Ignore Python cache directories and compiled files
 **/__pycache__/
 **/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/

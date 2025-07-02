@@ -3,7 +3,8 @@ from pathlib import Path
 from datetime import datetime
 
 # Add backend/src to import path
-sys.path.append(str(Path(__file__).resolve().parent / "backend" / "src"))
+backend_src = Path(__file__).resolve().parent.parent / "src"
+sys.path.insert(0, str(backend_src))
 
 from db.insert_logic import (
     insert_movie,

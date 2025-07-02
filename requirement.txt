@@ -1,4 +1,0 @@
-allocine-seances
-requests
-supabase
-python-dotenv
