@@ -9,7 +9,7 @@ from typing import Any, Dict
 import structlog
 from structlog.types import Processor
 
-from ..config.settings import get_settings
+from config.settings import get_settings
 
 settings = get_settings()
 

@@ -1,68 +1,76 @@
+"""
+Script to import movies from Allocine API.
+Modern version with proper logging and error handling.
+"""
 import sys
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 # Add backend/src to import path
-backend_src = Path(__file__).resolve().parent.parent / "src"
-sys.path.insert(0, str(backend_src))
+sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 
-from db.insert_logic import (
-    insert_movie,
-    insert_directors,
-    insert_languages,
-    generate_movie_id,
-    parse_runtime,
-)
+from db.insert_logic import bulk_insert_movies
+from utils.logger import get_logger
 from allocineAPI.allocineAPI import allocineAPI
 
-def main():
-    print("🎬 Launching movie import from Allociné API")
+logger = get_logger(__name__)
 
-    # Init Allociné API
+
+def fetch_movies(cinema_id: str, date: Optional[str] = None):
+    """
+    Fetch movies from Allocine API.
+    
+    Args:
+        cinema_id: Cinema ID (e.g., "P3757")
+        date: Date in YYYY-MM-DD format, defaults to today
+        
+    Returns:
+        List of movie data
+    """
+    if not date:
+        date = datetime.today().strftime("%Y-%m-%d")
+    
     api = allocineAPI()
-
-    # Cinema ID (example: UGC Gobelins, Paris)
-    cinema_id = "P3757"
-    date_str = datetime.today().strftime("%Y-%m-%d")
-
+    
     try:
-        movies = api.get_movies(cinema_id, date_str)
+        logger.info("Fetching movies from Allocine", 
+                   cinema_id=cinema_id, 
+                   date=date)
+        movies = api.get_movies(cinema_id, date)
+        logger.info("Movies fetched successfully", count=len(movies))
+        return movies
     except Exception as e:
-        print(f"❌ Error fetching movies: {e}")
+        logger.error("Failed to fetch movies", 
+                    cinema_id=cinema_id,
+                    date=date,
+                    error=str(e))
+        return []
+
+
+def main():
+    """Main entry point."""
+    logger.info("Starting movie import process")
+    
+    # Configuration
+    cinema_id = "P3757"  # UGC Gobelins, Paris
+    date = datetime.today().strftime("%Y-%m-%d")
+    
+    # Fetch movies
+    api = allocineAPI()
+    try:
+        movies = api.get_movies(cinema_id, date)
+        logger.info(f"Fetched {len(movies)} movies")
+    except Exception as e:
+        logger.error(f"Failed to fetch movies: {e}")
         return
+    
+    # Import movies
+    inserted, skipped = bulk_insert_movies(movies)
+    
+    # Summary
+    logger.info(f"Import complete: {inserted} inserted, {skipped} skipped")
 
-    print(f"📅 Movies for {date_str} at cinema {cinema_id} — {len(movies)} found")
-
-    inserted, skipped = 0, 0
-    for movie in movies:
-        if not movie.get("title"):
-            print("⚠️ Skipping movie with no title")
-            skipped += 1
-            continue
-
-        try:
-            # Insert movie or skip if already exists
-            movie_inserted = insert_movie(movie)
-            if movie_inserted:
-                inserted += 1
-            else:
-                skipped += 1
-
-            # Compute movie_id for relations
-            title = movie.get("title", "")
-            original_title = movie.get("originalTitle", "")
-            runtime = parse_runtime(movie.get("runtime", "0min"))
-            movie_id = generate_movie_id(title, original_title, runtime)
-
-            # Insert related data
-            insert_directors(movie, movie_id)
-            insert_languages(movie, movie_id)
-
-        except Exception as e:
-            print(f"❌ Error processing movie {movie.get('title')}: {e}")
-            skipped += 1
-
-    print(f"\n✅ Import complete: {inserted} movies inserted, {skipped} skipped or already present.")
 
 if __name__ == "__main__":
     main()
