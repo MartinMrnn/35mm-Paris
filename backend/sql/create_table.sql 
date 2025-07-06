@@ -38,7 +38,8 @@ create table releases (
     id serial primary key,
     movie_id int references movies(id) on delete cascade,
     release_name text,
-    release_date date
+    release_date date,
+    CONSTRAINT unique_release UNIQUE (movie_id, release_date)
 );
 
 create table cinemas (

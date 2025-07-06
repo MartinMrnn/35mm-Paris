@@ -382,18 +382,32 @@ def insert_screening(screening_data: dict, movie_id: int, cinema_id: str) -> boo
         existing = supabase.table("screenings").select("id").eq("movie_id", movie_id).eq("cinema_id", cinema_id_int).eq("date", date_str).eq("starts_at", time_str).execute()
         
         if len(existing.data) == 0:
-            supabase.table("screenings").insert(data).execute()
-            logger.debug("Inserted screening", 
-                        movie_id=movie_id,
-                        cinema_id=cinema_id,
-                        date=date_str,
-                        time=time_str)
+            try:
+                supabase.table("screenings").insert(data).execute()
+                logger.debug("Inserted screening", 
+                            movie_id=movie_id,
+                            cinema_id=cinema_id,
+                            date=date_str,
+                            time=time_str)
+                return True
+            except Exception as e:
+                # If it's a duplicate key error, it's not a real problem
+                if "duplicate key" in str(e):
+                    logger.debug("Screening duplicate (race condition)", 
+                                movie_id=movie_id,
+                                cinema_id=cinema_id,
+                                date=date_str,
+                                time=time_str)
+                    return True
+                else:
+                    raise
         else:
             logger.debug("Screening already exists", 
                         movie_id=movie_id,
                         cinema_id=cinema_id,
                         date=date_str,
                         time=time_str)
+            return False
         
         return True
         
@@ -487,11 +501,10 @@ def process_cinema_screenings(cinema_id: str, date: str) -> Tuple[int, int]:
             # Always add to mapping
             movie_title_to_id[movie_data["title"]] = movie_id
             
-            # Insert release dates if available
+            # Insert release dates if available - only the first one
             releases = movie_data.get("releases", [])
-            for release in releases:
-                if release.get("releaseDate"):
-                    insert_release(movie_id, release)
+            if releases and len(releases) > 0 and releases[0].get("releaseDate"):
+                insert_release(movie_id, releases[0])
         
         # Now get the actual showtimes
         showtimes_data = api.get_showtime(cinema_id, date)
