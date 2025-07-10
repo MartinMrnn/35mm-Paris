@@ -76,7 +76,7 @@ def generate_director_id(first_name: str, last_name: str) -> int:
     return int.from_bytes(hash_bytes[:4], 'big') % 100_000_000
 
 
-def movie_exists(movie_id: int) -> bool:
+#def movie_exists(movie_id: int) -> bool:
     """Check if movie already exists in database."""
     try:
         response = supabase.table("movies").select("id").eq("id", movie_id).execute()
@@ -86,7 +86,7 @@ def movie_exists(movie_id: int) -> bool:
         return False
 
 
-def insert_movie(movie_data: dict) -> Optional[int]:
+#def insert_movie(movie_data: dict) -> Optional[int]:
     """
     Insert movie into database.
     
@@ -158,7 +158,7 @@ def _parse_directors(director_str: Optional[str]) -> List[Director]:
     return directors
 
 
-def _insert_directors(movie: MovieData, movie_id: int) -> None:
+#def _insert_directors(movie: MovieData, movie_id: int) -> None:
     """Insert directors and link to movie."""
     directors = _parse_directors(movie.director)
     
@@ -214,7 +214,7 @@ def _parse_languages(languages_data: Optional[List[dict]]) -> List[Language]:
     return languages
 
 
-def _insert_languages(movie: MovieData, movie_id: int) -> None:
+#def _insert_languages(movie: MovieData, movie_id: int) -> None:
     """Insert languages and link to movie."""
     languages = _parse_languages(movie.languages)
     
@@ -242,7 +242,7 @@ def _insert_languages(movie: MovieData, movie_id: int) -> None:
                         error=str(e))
 
 
-def bulk_insert_movies(movies_data: List[dict]) -> Tuple[int, int]:
+#def bulk_insert_movies(movies_data: List[dict]) -> Tuple[int, int]:
     """
     Insert multiple movies.
     
@@ -333,7 +333,7 @@ def insert_cinema(cinema_data: dict) -> Optional[str]:
         return None
 
 
-def insert_screening(screening_data: dict, movie_id: int, cinema_id: str) -> bool:
+#def insert_screening(screening_data: dict, movie_id: int, cinema_id: str) -> bool:
     """
     Insert screening into database.
     
@@ -421,37 +421,33 @@ def insert_screening(screening_data: dict, movie_id: int, cinema_id: str) -> boo
 
 def insert_release(movie_id: int, release_data: dict) -> bool:
     """
-    Insert movie release date.
-    
-    Args:
-        movie_id: Movie ID
-        release_data: Release information
-        
-    Returns:
-        True if inserted, False otherwise
+    Insert movie release date avec UPSERT pour éviter les duplicates.
     """
     try:
         release_date = release_data.get("release_date", release_data.get("releaseDate"))
         if not release_date:
             return False
         
-        # Prepare data
         data = {
             "movie_id": movie_id,
             "release_name": release_data.get("release_name", "Sortie française"),
             "release_date": release_date
         }
         
-        # Insert
-        supabase.table("releases").insert(data).execute()
-        logger.debug("Inserted release", 
+        # Utiliser upsert au lieu d'insert
+        supabase.table("releases").upsert(
+            data, 
+            on_conflict="movie_id,release_date"
+        ).execute()
+        
+        logger.debug("Upserted release", 
                     movie_id=movie_id,
                     date=release_date)
         
         return True
         
     except Exception as e:
-        logger.error("Failed to insert release", 
+        logger.error("Failed to upsert release", 
                     movie_id=movie_id,
                     error=str(e))
         return False
@@ -460,6 +456,7 @@ def insert_release(movie_id: int, release_data: dict) -> bool:
 def process_cinema_screenings(cinema_id: str, date: str) -> Tuple[int, int]:
     """
     Process all screenings for a cinema on a specific date.
+    OPTIMIZED VERSION with bulk operations.
     
     Args:
         cinema_id: Cinema ID (e.g., "P3757")
@@ -469,6 +466,7 @@ def process_cinema_screenings(cinema_id: str, date: str) -> Tuple[int, int]:
         Tuple of (movies_inserted, screenings_inserted)
     """
     from allocineAPI.allocineAPI import allocineAPI
+    from .bulk_operations import bulk_insert_movies_optimized, bulk_insert_screenings
     
     logger.info("Processing cinema screenings", 
                cinema_id=cinema_id, 
@@ -477,29 +475,20 @@ def process_cinema_screenings(cinema_id: str, date: str) -> Tuple[int, int]:
     api = allocineAPI()
     
     try:
-        movies_inserted = 0
-        screenings_inserted = 0
-        
         # Get movies first
         movies_data = api.get_movies(cinema_id, date)
         
-        # Create a mapping of movie titles to IDs for later
-        movie_title_to_id = {}
+        # Bulk insert all movies at once!
+        movies_inserted, movie_ids_set = bulk_insert_movies_optimized(movies_data)
         
+        # Create a mapping of movie titles to IDs
+        movie_title_to_id = {}
         for movie_data in movies_data:
-            # Insert movie OR get existing ID
-            movie_id = insert_movie(movie_data)
-            if not movie_id:
-                # Movie already exists, need to get its ID
-                title = movie_data.get("title", "")
-                original_title = movie_data.get("originalTitle", title)
-                runtime = parse_runtime(movie_data.get("runtime", "0min"))
-                movie_id = generate_movie_id(title, original_title, runtime)
-            else:
-                movies_inserted += 1
-            
-            # Always add to mapping
-            movie_title_to_id[movie_data["title"]] = movie_id
+            title = movie_data.get("title", "")
+            original_title = movie_data.get("originalTitle", title)
+            runtime = parse_runtime(movie_data.get("runtime", "0min"))
+            movie_id = generate_movie_id(title, original_title, runtime)
+            movie_title_to_id[title] = movie_id
             
             # Insert release dates if available - only the first one
             releases = movie_data.get("releases", [])
@@ -509,6 +498,9 @@ def process_cinema_screenings(cinema_id: str, date: str) -> Tuple[int, int]:
         # Now get the actual showtimes
         showtimes_data = api.get_showtime(cinema_id, date)
         
+        # Prepare all screenings for bulk insert
+        all_screenings = []
+        
         for showtime_entry in showtimes_data:
             movie_title = showtime_entry["title"]
             movie_id = movie_title_to_id.get(movie_title)
@@ -517,16 +509,17 @@ def process_cinema_screenings(cinema_id: str, date: str) -> Tuple[int, int]:
                 logger.warning("Movie ID not found for showtime", title=movie_title)
                 continue
             
-            # Insert each showtime
+            # Collect all screenings
             for showtime in showtime_entry.get("showtimes", []):
-                screening_data = {
+                all_screenings.append({
+                    "movie_id": movie_id,
                     "date": date,
                     "time": showtime.get("startsAt"),
                     "version": showtime.get("diffusionVersion")
-                }
-                
-                if insert_screening(screening_data, movie_id, cinema_id):
-                    screenings_inserted += 1
+                })
+        
+        # Bulk insert all screenings at once!
+        screenings_inserted = bulk_insert_screenings(all_screenings, cinema_id)
         
         logger.info("Cinema processing complete",
                    cinema_id=cinema_id,

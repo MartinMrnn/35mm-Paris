@@ -3,11 +3,13 @@ Data models for 35mm Paris.
 Simple Pydantic models for data validation.
 """
 from typing import Optional, List, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class MovieData(BaseModel):
     """Movie data from Allocine API."""
+    model_config = ConfigDict(populate_by_name=True)
+    
     title: str
     originalTitle: Optional[str] = Field(None, alias="originalTitle")
     synopsis: Optional[str] = Field(None, alias="synopsisFull")
@@ -19,20 +21,19 @@ class MovieData(BaseModel):
     is_premiere: bool = Field(False, alias="isPremiere")
     weekly_outing: bool = Field(False, alias="weeklyOuting")
     
-    class Config:
-        populate_by_name = True
-    
-    @validator('title')
+    @field_validator('title')
+    @classmethod
     def title_not_empty(cls, v):
         if not v or not v.strip():
             raise ValueError('Title cannot be empty')
         return v.strip()
     
-    @validator('originalTitle', pre=True)
-    def original_title_default(cls, v, values):
+    @field_validator('originalTitle', mode='before')
+    @classmethod
+    def original_title_default(cls, v, info):
         """If no original title, use the main title."""
         if not v:
-            return values.get('title', '')
+            return info.data.get('title', '')
         return v
 
 
@@ -41,7 +42,8 @@ class Director(BaseModel):
     first_name: str
     last_name: str
     
-    @validator('first_name', 'last_name')
+    @field_validator('first_name', 'last_name')
+    @classmethod
     def names_not_empty(cls, v):
         if not v or not v.strip():
             raise ValueError('Name cannot be empty')
@@ -53,10 +55,11 @@ class Language(BaseModel):
     code: str
     label: Optional[str] = None
     
-    @validator('label', pre=True, always=True)
-    def label_default(cls, v, values):
+    @field_validator('label', mode='before')
+    @classmethod
+    def label_default(cls, v, info):
         """If no label, use code as label."""
-        return v or values.get('code', '')
+        return v or info.data.get('code', '')
 
 
 class Cinema(BaseModel):
