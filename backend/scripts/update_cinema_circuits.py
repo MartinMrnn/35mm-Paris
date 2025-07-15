@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Script pour enrichir les cinémas avec leur circuit (chaîne).
+Script pour créer les circuits et les associer aux cinémas.
 Usage: python update_cinema_circuits.py
 """
 import sys
 import time
+import hashlib
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict, List, Tuple
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -17,107 +18,153 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-DELAY_BETWEEN_REQUESTS = 0.5  # Pour ne pas surcharger l'API
+DELAY_BETWEEN_REQUESTS = 0.5
 
 
-def update_cinema_circuits():
-    """Met à jour les circuits pour tous les cinémas."""
+def generate_circuit_id(circuit_code: str) -> int:
+    """Génère un ID stable pour un circuit, comme pour les directors."""
+    normalized = circuit_code.strip().lower()
+    hash_bytes = hashlib.sha256(normalized.encode()).digest()
+    return int.from_bytes(hash_bytes[:4], 'big') % 100_000_000
+
+
+def create_circuits_and_update_cinemas():
+    """Crée les circuits et met à jour les cinémas."""
     api = allocineAPI()
     
-    logger.info("Récupération des circuits disponibles...")
+    logger.info("=== ÉTAPE 1: Récupération des circuits ===")
     
     try:
         # 1. Récupérer tous les circuits
-        circuits = api.get_circuit()
-        logger.info(f"Trouvé {len(circuits)} circuits")
+        circuits_data = api.get_circuit()
+        logger.info(f"Trouvé {len(circuits_data)} circuits")
         
-        # 2. Pour chaque circuit, récupérer ses cinémas
-        cinema_to_circuit: Dict[str, Dict[str, str]] = {}
+        # 2. Insérer les circuits dans la base
+        circuits_to_insert = []
+        circuit_mapping = {}  # circuit_code -> circuit_id
         
-        for circuit in circuits:
-            circuit_id = circuit['id']
+        for circuit in circuits_data:
+            circuit_code = circuit['id']
             circuit_name = circuit['name']
+            circuit_id = generate_circuit_id(circuit_code)
             
-            logger.info(f"Traitement du circuit: {circuit_name} ({circuit_id})")
+            circuits_to_insert.append({
+                'id': circuit_id,
+                'code': circuit_code,
+                'name': circuit_name
+            })
+            
+            circuit_mapping[circuit_code] = circuit_id
+            logger.info(f"Circuit: {circuit_name} → ID: {circuit_id}")
+        
+        # Bulk insert des circuits
+        if circuits_to_insert:
+            result = supabase.table("circuits").upsert(
+                circuits_to_insert,
+                on_conflict="id"
+            ).execute()
+            logger.info(f"✅ {len(circuits_to_insert)} circuits insérés/mis à jour")
+        
+        # 3. Pour chaque circuit, récupérer ses cinémas et les mettre à jour
+        logger.info("\n=== ÉTAPE 2: Association cinémas-circuits ===")
+        
+        total_updates = 0
+        cinema_updates = []  # Pour bulk update
+        
+        for circuit in circuits_data:
+            circuit_code = circuit['id']
+            circuit_name = circuit['name']
+            circuit_id = circuit_mapping[circuit_code]
+            
+            logger.info(f"\nTraitement: {circuit_name}")
             
             try:
                 # Récupérer les cinémas de ce circuit
-                cinemas_in_circuit = api.get_cinema(circuit_id)
+                cinemas_in_circuit = api.get_cinema(circuit_code)
+                logger.info(f"  → {len(cinemas_in_circuit)} cinémas trouvés")
                 
-                logger.info(f"  → {len(cinemas_in_circuit)} cinémas dans ce circuit")
-                
-                # Mapper chaque cinéma à son circuit
+                # Préparer les updates
                 for cinema in cinemas_in_circuit:
-                    cinema_id = cinema['id']
-                    cinema_to_circuit[cinema_id] = {
-                        'circuit_id': circuit_id,
-                        'circuit_name': circuit_name
-                    }
+                    cinema_id_str = cinema['id']
+                    cinema_id_int = cinema_id_to_int(cinema_id_str)
+                    
+                    cinema_updates.append({
+                        'id': cinema_id_int,
+                        'circuit_id': circuit_id
+                    })
                 
-                # Pause entre les requêtes
                 time.sleep(DELAY_BETWEEN_REQUESTS)
                 
             except Exception as e:
                 logger.error(f"Erreur pour le circuit {circuit_name}: {e}")
                 continue
         
-        # 3. Mettre à jour la base de données
-        logger.info(f"Mise à jour de {len(cinema_to_circuit)} cinémas avec leur circuit...")
-        
-        updated_count = 0
-        errors_count = 0
-        
-        for cinema_id_str, circuit_info in cinema_to_circuit.items():
-            try:
-                # Convertir l'ID pour la base
-                cinema_id_int = cinema_id_to_int(cinema_id_str)
+        # 4. Bulk update des cinémas
+        if cinema_updates:
+            # Faire les updates par batch de 100
+            batch_size = 100
+            for i in range(0, len(cinema_updates), batch_size):
+                batch = cinema_updates[i:i + batch_size]
                 
-                # Mettre à jour le cinéma
-                result = supabase.table("cinemas").update({
-                    "circuit_id": circuit_info['circuit_id']
-                }).eq("id", cinema_id_int).execute()
-                
-                if result.data:
-                    updated_count += 1
-                    logger.debug(f"Mis à jour: Cinéma {cinema_id_str} → {circuit_info['circuit_name']}")
-                
-            except Exception as e:
-                errors_count += 1
-                logger.error(f"Erreur update cinéma {cinema_id_str}: {e}")
+                for update in batch:
+                    try:
+                        result = supabase.table("cinemas").update({
+                            'circuit_id': update['circuit_id']
+                        }).eq('id', update['id']).execute()
+                        
+                        if result.data:
+                            total_updates += 1
+                    except Exception as e:
+                        logger.error(f"Erreur update cinéma {update['id']}: {e}")
+            
+            logger.info(f"\n✅ {total_updates} cinémas mis à jour avec leur circuit")
         
-        # 4. Rapport final
-        logger.info("=== RAPPORT FINAL ===")
-        logger.info(f"Circuits trouvés: {len(circuits)}")
-        logger.info(f"Cinémas avec circuit identifié: {len(cinema_to_circuit)}")
-        logger.info(f"Cinémas mis à jour: {updated_count}")
-        logger.info(f"Erreurs: {errors_count}")
+        # 5. Statistiques finales
+        logger.info("\n=== STATISTIQUES ===")
         
-        # 5. Vérifier les cinémas sans circuit
-        cinemas_without_circuit = supabase.table("cinemas").select("id, name").is_("circuit_name", "null").execute()
+        # Cinémas par circuit
+        stats_query = """
+        SELECT 
+            ci.name as circuit_name, 
+            COUNT(c.id) as nb_cinemas
+        FROM circuits ci
+        LEFT JOIN cinemas c ON c.circuit_id = ci.id
+        GROUP BY ci.name
+        ORDER BY nb_cinemas DESC
+        """
         
-        if cinemas_without_circuit.data:
-            logger.info(f"\nCinémas indépendants (sans circuit): {len(cinemas_without_circuit.data)}")
-            for cinema in cinemas_without_circuit.data[:10]:
+        # Utiliser une requête plus simple compatible avec Supabase
+        circuits_with_counts = []
+        for circuit in circuits_to_insert:
+            count_result = supabase.table("cinemas").select("id", count="exact").eq("circuit_id", circuit['id']).execute()
+            if count_result.count > 0:
+                circuits_with_counts.append({
+                    'name': circuit['name'],
+                    'count': count_result.count
+                })
+        
+        circuits_with_counts.sort(key=lambda x: x['count'], reverse=True)
+        
+        logger.info("\nCinémas par circuit:")
+        for item in circuits_with_counts:
+            logger.info(f"  - {item['name']}: {item['count']} cinémas")
+        
+        # Cinémas indépendants
+        independents = supabase.table("cinemas").select("id, name").is_("circuit_id", "null").execute()
+        
+        if independents.data:
+            logger.info(f"\nCinémas indépendants: {len(independents.data)}")
+            for cinema in independents.data[:5]:
                 logger.info(f"  - {cinema['name']}")
-            if len(cinemas_without_circuit.data) > 10:
-                logger.info(f"  ... et {len(cinemas_without_circuit.data) - 10} autres")
+            if len(independents.data) > 5:
+                logger.info(f"  ... et {len(independents.data) - 5} autres")
         
-        # 6. Afficher quelques exemples de circuits
-        logger.info("\nExemples de circuits trouvés:")
-        circuit_stats = {}
-        for circuit_info in cinema_to_circuit.values():
-            name = circuit_info['circuit_name']
-            circuit_stats[name] = circuit_stats.get(name, 0) + 1
-        
-        for circuit_name, count in sorted(circuit_stats.items(), key=lambda x: x[1], reverse=True)[:10]:
-            logger.info(f"  - {circuit_name}: {count} cinémas")
+        return 0
         
     except Exception as e:
         logger.error(f"Erreur générale: {e}")
         return 1
-    
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(update_cinema_circuits())
+    sys.exit(create_circuits_and_update_cinemas())
