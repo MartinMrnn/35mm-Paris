@@ -1,0 +1,33 @@
+============================================================
+RAPPORT DE VALIDATION DES DONNÉES - 35mm Paris
+============================================================
+Date: 2025-07-11 12:55:22
+
+STATISTIQUES
+------------------------------
+cinemas_no_address......................          0
+cinemas_no_zipcode......................          0
+duplicate_movies........................          0
+duplicate_screenings_sample.............          0
+movies_no_poster........................          0
+movies_no_synopsis......................          0
+movies_without_directors................          6
+old_screenings..........................        281
+orphaned_movie_refs.....................          0
+total_movies............................        428
+unused_cinemas..........................         33
+
+AVERTISSEMENTS (1)
+------------------------------
+[UNUSED_CINEMAS] 33 cinémas n'ont aucune séance
+
+INFORMATIONS (2)
+------------------------------
+[MISSING_DIRECTORS] 6 films sans réalisateur
+[OLD_SCREENINGS] 281 séances dans le passé (avant 2025-07-10)
+
+RÉSUMÉ
+------------------------------
+✅ Aucune erreur critique
+⚠️  1 avertissements
+Total: 3 problèmes détectés

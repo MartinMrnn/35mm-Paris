@@ -44,9 +44,9 @@ def get_paris_cinemas() -> List[dict]:
         return []
 
 
-def import_cinemas(cinemas: List[dict]) -> Set[str]:
+def import_cinemas(cinemas: List[dict], circuit_mapping: Optional[Dict[str, int]] = None) -> Set[str]:
     """
-    Importe les cinémas dans la base de données en BULK.
+    Importe les cinémas dans la base de données avec leur circuit.
     Retourne les IDs des cinémas importés avec succès.
     """
     from db.insert_logic import cinema_id_to_int
@@ -61,7 +61,6 @@ def import_cinemas(cinemas: List[dict]) -> Set[str]:
             cinema_id = cinema.get("id")
             if not cinema_id:
                 continue
-                
             # Enrichir les données avec ville/code postal
             cinema["city"] = "Paris"
             if not cinema.get("zipcode"):
@@ -71,14 +70,13 @@ def import_cinemas(cinemas: List[dict]) -> Set[str]:
                 cinema["zipcode"] = cp_match.group() if cp_match else "75000"
             
             # Préparer pour l'insertion
-            cinemas_to_insert.append({
+            cinema_data = {
                 "id": cinema_id_to_int(cinema_id),
                 "name": cinema["name"],
                 "address": cinema.get("address"),
                 "city": cinema["city"],
                 "zipcode": cinema["zipcode"]
-            })
-            cinema_ids.add(cinema_id)
+            }
             
         except Exception as e:
             logger.error(f"Erreur préparation cinéma {cinema.get('name')}: {e}")
@@ -137,9 +135,16 @@ def main():
     parser.add_argument("--days", type=int, default=7, help="Nombre de jours à importer (défaut: 7)")
     parser.add_argument("--test", action="store_true", help="Mode test: importe seulement 3 cinémas")
     parser.add_argument("--clean", action="store_true", help="Nettoyer les vieilles séances avant import")
+    parser.add_argument("--clean-only", action="store_true", help="Nettoyer seulement, sans import")
     parser.add_argument("--cinema", type=str, help="Importer un seul cinéma par son ID")
     
     args = parser.parse_args()
+    
+    # Si nettoyage seul demandé
+    if args.clean_only:
+        logger.info("=== Nettoyage seul ===")
+        clean_old_screenings()
+        return 0
     
     logger.info(f"=== Début import Paris - {args.days} jours ===")
     start_time = datetime.now()

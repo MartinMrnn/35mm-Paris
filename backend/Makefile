@@ -43,3 +43,9 @@ clean:
 
 run-import:
 	python scripts/import_movies.py
+
+run-validate:
+	python scripts/validate_data.py
+
+update-circuits:
+	python scripts/update_cinema_circuits.py

@@ -4,9 +4,9 @@ Modern, type-safe, with proper error handling.
 """
 import re
 import hashlib
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 
-from models import MovieData, Director, Language, Cinema, Screening
+from models import MovieData, Director, Language
 from utils.logger import get_logger
 from .supabase_client import supabase
 from datetime import datetime
@@ -76,68 +76,7 @@ def generate_director_id(first_name: str, last_name: str) -> int:
     return int.from_bytes(hash_bytes[:4], 'big') % 100_000_000
 
 
-#def movie_exists(movie_id: int) -> bool:
-    """Check if movie already exists in database."""
-    try:
-        response = supabase.table("movies").select("id").eq("id", movie_id).execute()
-        return len(response.data) > 0
-    except Exception as e:
-        logger.error("Error checking movie existence", movie_id=movie_id, error=str(e))
-        return False
-
-
-#def insert_movie(movie_data: dict) -> Optional[int]:
-    """
-    Insert movie into database.
-    
-    Args:
-        movie_data: Raw movie data from API
-        
-    Returns:
-        Movie ID if inserted, None if already exists or error
-    """
-    try:
-        # Validate data
-        movie = MovieData(**movie_data)
-        runtime = parse_runtime(movie.runtime)
-        movie_id = generate_movie_id(movie.title, movie.originalTitle or movie.title, runtime)
-        
-        # Check if exists
-        if movie_exists(movie_id):
-            logger.info("Movie already exists", title=movie.title, movie_id=movie_id)
-            return None
-        
-        # Prepare data for insertion
-        data = {
-            "id": movie_id,
-            "title": movie.title,
-            "original_title": movie.originalTitle or movie.title,
-            "synopsis": movie.synopsis,
-            "poster_url": movie.poster_url,
-            "runtime": runtime,
-            "has_dvd_release": movie.has_dvd_release,
-            "is_premiere": movie.is_premiere,
-            "weekly_outing": movie.weekly_outing
-        }
-        
-        # Insert
-        supabase.table("movies").insert(data).execute()
-        logger.info("Inserted movie", title=movie.title, movie_id=movie_id)
-        
-        # Insert related data
-        _insert_directors(movie, movie_id)
-        _insert_languages(movie, movie_id)
-        
-        return movie_id
-        
-    except Exception as e:
-        logger.error("Failed to insert movie", 
-                    title=movie_data.get('title', 'Unknown'),
-                    error=str(e))
-        return None
-
-
-def _parse_directors(director_str: Optional[str]) -> List[Director]:
+def parse_directors(director_str: Optional[str]) -> List[Director]:
     """Parse director string into Director objects."""
     if not director_str or director_str == "Unknown Director":
         return []
@@ -158,38 +97,7 @@ def _parse_directors(director_str: Optional[str]) -> List[Director]:
     return directors
 
 
-#def _insert_directors(movie: MovieData, movie_id: int) -> None:
-    """Insert directors and link to movie."""
-    directors = _parse_directors(movie.director)
-    
-    for director in directors:
-        try:
-            director_id = generate_director_id(director.first_name, director.last_name)
-            
-            # Insert director if not exists (upsert)
-            supabase.table("directors").upsert({
-                "id": director_id,
-                "first_name": director.first_name,
-                "last_name": director.last_name
-            }).execute()
-            
-            # Link to movie (ignore conflicts)
-            supabase.table("movie_directors").upsert({
-                "movie_id": movie_id,
-                "director_id": director_id
-            }).execute()
-            
-            logger.debug("Linked director to movie", 
-                        director=f"{director.first_name} {director.last_name}",
-                        movie_id=movie_id)
-                        
-        except Exception as e:
-            logger.error("Failed to insert director", 
-                        director=f"{director.first_name} {director.last_name}",
-                        error=str(e))
-
-
-def _parse_languages(languages_data: Optional[List[dict]]) -> List[Language]:
+def parse_languages(languages_data: Optional[List[dict]]) -> List[Language]:
     """Parse language data into Language objects."""
     if not languages_data:
         return []
@@ -214,68 +122,6 @@ def _parse_languages(languages_data: Optional[List[dict]]) -> List[Language]:
     return languages
 
 
-#def _insert_languages(movie: MovieData, movie_id: int) -> None:
-    """Insert languages and link to movie."""
-    languages = _parse_languages(movie.languages)
-    
-    for language in languages:
-        try:
-            # Insert language if not exists
-            supabase.table("languages").upsert({
-                "code": language.code,
-                "label": language.label
-            }).execute()
-            
-            # Link to movie
-            supabase.table("movie_languages").upsert({
-                "movie_id": movie_id,
-                "code": language.code
-            }).execute()
-            
-            logger.debug("Linked language to movie", 
-                        language=language.code,
-                        movie_id=movie_id)
-                        
-        except Exception as e:
-            logger.error("Failed to insert language", 
-                        language=language.code,
-                        error=str(e))
-
-
-#def bulk_insert_movies(movies_data: List[dict]) -> Tuple[int, int]:
-    """
-    Insert multiple movies.
-    
-    Args:
-        movies_data: List of movie data from API
-        
-    Returns:
-        Tuple of (inserted_count, skipped_count)
-    """
-    inserted = 0
-    skipped = 0
-    
-    logger.info("Starting bulk insert", total_movies=len(movies_data))
-    
-    for movie_data in movies_data:
-        if not movie_data.get("title"):
-            logger.warning("Skipping movie without title")
-            skipped += 1
-            continue
-        
-        movie_id = insert_movie(movie_data)
-        if movie_id:
-            inserted += 1
-        else:
-            skipped += 1
-    
-    logger.info("Bulk insert complete", 
-                inserted=inserted, 
-                skipped=skipped)
-    
-    return inserted, skipped
-
-
 def cinema_id_to_int(cinema_id: str) -> int:
     """Convert string cinema ID to integer for database."""
     if cinema_id.isdigit():
@@ -284,12 +130,94 @@ def cinema_id_to_int(cinema_id: str) -> int:
     return int(hashlib.sha256(cinema_id.encode()).hexdigest()[:8], 16)
 
 
-def insert_cinema(cinema_data: dict) -> Optional[str]:
+def generate_circuit_id(circuit_code: str) -> int:
+    """Generate stable unique ID for a circuit."""
+    normalized = circuit_code.strip().lower()
+    hash_bytes = hashlib.sha256(normalized.encode()).digest()
+    return int.from_bytes(hash_bytes[:4], 'big') % 100_000_000
+
+
+def insert_circuits() -> Dict[str, int]:
+    """
+    Insert all circuits into database.
+    
+    Returns:
+        Dict mapping circuit_code to circuit_id
+    """
+    from allocineAPI.allocineAPI import allocineAPI
+    
+    api = allocineAPI()
+    circuit_mapping = {}
+    
+    try:
+        circuits_data = api.get_circuit()
+        logger.info(f"Found {len(circuits_data)} circuits")
+        
+        circuits_to_insert = []
+        for circuit in circuits_data:
+            circuit_code = circuit['id']
+            circuit_name = circuit['name']
+            circuit_id = generate_circuit_id(circuit_code)
+            
+            circuits_to_insert.append({
+                'id': circuit_id,
+                'code': circuit_code,
+                'name': circuit_name
+            })
+            
+            circuit_mapping[circuit_code] = circuit_id
+        
+        # Bulk insert
+        if circuits_to_insert:
+            supabase.table("circuits").upsert(
+                circuits_to_insert,
+                on_conflict="id"
+            ).execute()
+            logger.info(f"Inserted/updated {len(circuits_to_insert)} circuits")
+            
+    except Exception as e:
+        logger.error(f"Failed to insert circuits: {e}")
+    
+    return circuit_mapping
+
+
+def get_cinema_circuit(cinema_id: str, circuit_mapping: Dict[str, int]) -> Optional[int]:
+    """
+    Get circuit ID for a cinema by checking all circuits.
+    
+    Args:
+        cinema_id: Cinema ID to look for
+        circuit_mapping: Dict of circuit_code -> circuit_id
+        
+    Returns:
+        Circuit ID if found, None otherwise
+    """
+    from allocineAPI.allocineAPI import allocineAPI
+    
+    api = allocineAPI()
+    
+    for circuit_code, circuit_id in circuit_mapping.items():
+        try:
+            cinemas_in_circuit = api.get_cinema(circuit_code)
+            cinema_ids = {c['id'] for c in cinemas_in_circuit}
+            
+            if cinema_id in cinema_ids:
+                return circuit_id
+                
+        except Exception as e:
+            logger.error(f"Error checking circuit {circuit_code}: {e}")
+            continue
+    
+    return None
+
+
+def insert_cinema(cinema_data: dict, circuit_id: Optional[int] = None) -> Optional[str]:
     """
     Insert cinema into database.
     
     Args:
         cinema_data: Cinema data from API
+        circuit_id: Optional circuit ID if known
         
     Returns:
         Cinema ID if inserted, None if error
@@ -306,6 +234,11 @@ def insert_cinema(cinema_data: dict) -> Optional[str]:
         # Check if exists
         response = supabase.table("cinemas").select("id").eq("id", cinema_id_int).execute()
         if len(response.data) > 0:
+            # Update circuit_id if provided and not already set
+            if circuit_id:
+                supabase.table("cinemas").update({
+                    "circuit_id": circuit_id
+                }).eq("id", cinema_id_int).execute()
             logger.debug("Cinema already exists", cinema_id=cinema_id_str)
             return cinema_id_str
         
@@ -318,11 +251,16 @@ def insert_cinema(cinema_data: dict) -> Optional[str]:
             "zipcode": cinema_data.get("zipcode")
         }
         
+        # Add circuit_id if provided
+        if circuit_id:
+            data["circuit_id"] = circuit_id
+        
         # Insert
         supabase.table("cinemas").insert(data).execute()
         logger.info("Inserted cinema", 
                    name=data["name"], 
-                   cinema_id=cinema_id_str)
+                   cinema_id=cinema_id_str,
+                   circuit_id=circuit_id)
         
         return cinema_id_str
         
@@ -331,92 +269,6 @@ def insert_cinema(cinema_data: dict) -> Optional[str]:
                     cinema_id=cinema_data.get("id"),
                     error=str(e))
         return None
-
-
-#def insert_screening(screening_data: dict, movie_id: int, cinema_id: str) -> bool:
-    """
-    Insert screening into database.
-    
-    Args:
-        screening_data: Screening data with date and time
-        movie_id: Movie ID
-        cinema_id: Cinema ID (string from API)
-        
-    Returns:
-        True if inserted, False otherwise
-    """
-    try:
-        # Convert cinema ID to int
-        cinema_id_int = cinema_id_to_int(cinema_id)
-        
-        # Extract date and time
-        date_str = screening_data.get("date")
-        time_str = screening_data.get("time", screening_data.get("starts_at"))
-        version = screening_data.get("version", screening_data.get("diffusion_version"))
-        
-        if not date_str:
-            logger.error("Screening without date")
-            return False
-        
-        # Extract just the time part if it's a datetime string
-        if time_str and "T" in time_str:
-            # Format: "2025-07-04T13:15:00" -> "13:15:00"
-            time_str = time_str.split("T")[1]
-            # Remove timezone if present
-            if "+" in time_str:
-                time_str = time_str.split("+")[0]
-            if "Z" in time_str:
-                time_str = time_str.replace("Z", "")
-        
-        # Prepare data
-        data = {
-            "movie_id": movie_id,
-            "cinema_id": cinema_id_int,
-            "date": date_str,
-            "starts_at": time_str,
-            "diffusion_version": version
-        }
-        
-        # Upsert (to avoid duplicate constraint violations)
-        # First check if exists
-        existing = supabase.table("screenings").select("id").eq("movie_id", movie_id).eq("cinema_id", cinema_id_int).eq("date", date_str).eq("starts_at", time_str).execute()
-        
-        if len(existing.data) == 0:
-            try:
-                supabase.table("screenings").insert(data).execute()
-                logger.debug("Inserted screening", 
-                            movie_id=movie_id,
-                            cinema_id=cinema_id,
-                            date=date_str,
-                            time=time_str)
-                return True
-            except Exception as e:
-                # If it's a duplicate key error, it's not a real problem
-                if "duplicate key" in str(e):
-                    logger.debug("Screening duplicate (race condition)", 
-                                movie_id=movie_id,
-                                cinema_id=cinema_id,
-                                date=date_str,
-                                time=time_str)
-                    return True
-                else:
-                    raise
-        else:
-            logger.debug("Screening already exists", 
-                        movie_id=movie_id,
-                        cinema_id=cinema_id,
-                        date=date_str,
-                        time=time_str)
-            return False
-        
-        return True
-        
-    except Exception as e:
-        logger.error("Failed to insert screening", 
-                    movie_id=movie_id,
-                    cinema_id=cinema_id,
-                    error=str(e))
-        return False
 
 
 def insert_release(movie_id: int, release_data: dict) -> bool:
@@ -576,3 +428,18 @@ def insert_cinema_from_location(location_id: str) -> List[str]:
                     location_id=location_id,
                     error=str(e))
         return []
+
+
+# Exposer seulement les fonctions publiques nécessaires
+__all__ = [
+    'parse_runtime',
+    'generate_movie_id', 
+    'generate_director_id',
+    'parse_directors',
+    'parse_languages',
+    'cinema_id_to_int',
+    'insert_cinema',
+    'insert_release',
+    'process_cinema_screenings',
+    'insert_cinema_from_location'
+]

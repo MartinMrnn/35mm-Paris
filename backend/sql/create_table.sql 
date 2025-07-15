@@ -43,23 +43,31 @@ create table releases (
 );
 
 create table cinemas (
-    id int primary key,
+    id text primary key,
     name text,
     address text,
     city text,
-    zipcode text
+    zipcode text,
+    circuit_id int
 );
 
 create table screenings (
     id serial primary key,
     movie_id int references movies(id) on delete cascade,
-    cinema_id int references cinemas(id) on delete cascade,
+    cinema_id text references cinemas(id) on delete cascade,
     date date not null,
     starts_at time,
     diffusion_version text,
     constraint unique_screening unique (movie_id, cinema_id, date, starts_at)
 );
 
+CREATE TABLE circuits (
+    id INT PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,  -- ex: "circuit-81002"
+    name TEXT NOT NULL          -- ex: "Pathé Cinémas"
+);
+
 create index idx_screenings_date on screenings(date);
 create index idx_screenings_cinema on screenings(cinema_id);
 create index idx_screenings_movie on screenings(movie_id);
+CREATE INDEX idx_cinemas_circuit ON cinemas(circuit_id);
