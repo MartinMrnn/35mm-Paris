@@ -1,6 +1,7 @@
 """
 Pytest configuration and shared fixtures.
 """
+
 import os
 import sys
 from pathlib import Path
@@ -16,15 +17,16 @@ os.environ["LOG_LEVEL"] = "DEBUG"
 os.environ["LOG_FORMAT"] = "text"  # Better for test output
 
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 
 @pytest.fixture
 def mock_supabase_client():
     """Mock Supabase client for testing."""
     mock_client = Mock()
-    
+
     # Setup common table mocks
     mock_table = Mock()
     mock_table.select.return_value = mock_table
@@ -32,9 +34,9 @@ def mock_supabase_client():
     mock_table.upsert.return_value = mock_table
     mock_table.eq.return_value = mock_table
     mock_table.execute.return_value = Mock(data=[])
-    
+
     mock_client.table.return_value = mock_table
-    
+
     return mock_client
 
 
@@ -42,7 +44,7 @@ def mock_supabase_client():
 def mock_allocine_api():
     """Mock AllocineAPI for testing."""
     mock_api = Mock()
-    
+
     # Sample movie data
     mock_api.get_movies.return_value = [
         {
@@ -53,30 +55,23 @@ def mock_allocine_api():
             "languages": [{"code": "fr", "label": "Français"}],
             "hasDvdRelease": False,
             "isPremiere": False,
-            "weeklyOuting": False
+            "weeklyOuting": False,
         }
     ]
-    
+
     # Sample showtime data
     mock_api.get_showtime.return_value = [
         {
             "title": "Test Movie",
             "showtimes": [
-                {
-                    "startsAt": "2025-07-08T14:30:00",
-                    "diffusionVersion": "VF"
-                }
-            ]
+                {"startsAt": "2025-07-08T14:30:00", "diffusionVersion": "VF"}
+            ],
         }
     ]
-    
+
     # Sample cinema data
     mock_api.get_cinema.return_value = [
-        {
-            "id": "P0001",
-            "name": "Test Cinema",
-            "address": "123 Test Street"
-        }
+        {"id": "P0001", "name": "Test Cinema", "address": "123 Test Street"}
     ]
-    
+
     return mock_api

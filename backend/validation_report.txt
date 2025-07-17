@@ -1,33 +1,46 @@
 ============================================================
 RAPPORT DE VALIDATION DES DONNÉES - 35mm Paris
 ============================================================
-Date: 2025-07-11 12:55:22
+Date: 2025-07-17 10:38:29
 
 STATISTIQUES
 ------------------------------
-cinemas_no_address......................          0
-cinemas_no_zipcode......................          0
-duplicate_movies........................          0
-duplicate_screenings_sample.............          0
-movies_no_poster........................          0
-movies_no_synopsis......................          0
-movies_without_directors................          6
-old_screenings..........................        281
-orphaned_movie_refs.....................          0
-total_movies............................        428
-unused_cinemas..........................         33
+Cinemas No Address......................          0
+Cinemas No Zipcode......................          0
+Cinemas With Screenings.................         74
+Duplicate Movies........................          0
+Duplicate Screenings....................          0
+Empty Circuits..........................          4
+Future Screenings.......................          0
+Invalid Circuit Refs....................          0
+Movies No Language Approx...............        233
+Movies No Poster........................          0
+Movies No Synopsis......................          0
+Movies Without Directors................          9
+Old Screenings..........................      11508
+Orphaned Movie Refs.....................          0
+Total Cinemas...........................        106
+Total Circuits..........................          8
+Total Movies............................        617
+Unused Cinemas..........................         32
 
-AVERTISSEMENTS (1)
+⚠️  AVERTISSEMENTS (2)
 ------------------------------
-[UNUSED_CINEMAS] 33 cinémas n'ont aucune séance
+[UNUSED_CINEMAS] 32 cinémas n'ont aucune séance
+[OLD_SCREENINGS] 11508 séances dans le passé - considérer un nettoyage avec --clean
 
-INFORMATIONS (2)
+ℹ️  INFORMATIONS (3)
 ------------------------------
-[MISSING_DIRECTORS] 6 films sans réalisateur
-[OLD_SCREENINGS] 281 séances dans le passé (avant 2025-07-10)
+[MISSING_DIRECTORS] 9 films sans réalisateur (ex: Maalik)
+[EMPTY_CIRCUITS] 4 circuits sans cinémas: Megarama, Cinéligue Champagne-Ardennes, Artec cinémas...
+[MISSING_LANGUAGES] Environ 233 films sans information de langue
 
-RÉSUMÉ
+RÉSUMÉ ET RECOMMANDATIONS
 ------------------------------
 ✅ Aucune erreur critique
-⚠️  1 avertissements
-Total: 3 problèmes détectés
+⚠️  2 avertissements à surveiller
+   → Lancer 'python import_paris.py --clean' pour nettoyer les vieilles séances
+
+Total: 5 problèmes détectés
+
+📊 Score de qualité des données: 100%

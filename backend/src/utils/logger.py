@@ -2,9 +2,9 @@
 Structured logging configuration using structlog.
 Provides consistent, searchable logs across the application.
 """
+
 import logging
 import sys
-from typing import Any, Dict
 
 import structlog
 from structlog.types import Processor
@@ -16,14 +16,14 @@ settings = get_settings()
 
 def setup_logging() -> None:
     """Configure structured logging for the application."""
-    
+
     # Configure standard logging
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
         level=getattr(logging, settings.log_level.upper()),
     )
-    
+
     # Processors for structlog
     processors: list[Processor] = [
         structlog.stdlib.filter_by_level,
@@ -35,13 +35,13 @@ def setup_logging() -> None:
         structlog.processors.format_exc_info,
         structlog.processors.UnicodeDecoder(),
     ]
-    
+
     # Add appropriate renderer based on format
     if settings.log_format == "json":
         processors.append(structlog.processors.JSONRenderer())
     else:
         processors.append(structlog.dev.ConsoleRenderer())
-    
+
     # Configure structlog
     structlog.configure(
         processors=processors,
@@ -54,10 +54,10 @@ def setup_logging() -> None:
 def get_logger(name: str) -> structlog.BoundLogger:
     """
     Get a logger instance for a module.
-    
+
     Args:
         name: Module name (usually __name__)
-        
+
     Returns:
         Configured logger instance
     """
