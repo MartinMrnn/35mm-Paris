@@ -1,11 +1,14 @@
 """
 Tests for database insertion logic.
+Updated to test BIGINT support for cinema IDs.
 """
 
 import pytest
 
 from db.insert_logic import (
+    cinema_id_to_bigint,
     cinema_id_to_int,
+    generate_circuit_id,
     generate_director_id,
     generate_movie_id,
     parse_directors,
@@ -46,7 +49,7 @@ class TestGenerateIds:
         id1 = generate_movie_id("The Matrix", "The Matrix", 136)
         id2 = generate_movie_id("The Matrix", "The Matrix", 136)
         assert id1 == id2
-        assert 0 < id1 < 100_000_000
+        assert 0 < id1 < 2_000_000_000  # Safe INT range
 
     def test_generate_movie_id_different_movies(self):
         """Different movies should have different IDs."""
@@ -65,19 +68,44 @@ class TestGenerateIds:
         id1 = generate_director_id("Christopher", "Nolan")
         id2 = generate_director_id("Christopher", "Nolan")
         assert id1 == id2
-        assert 0 < id1 < 100_000_000
+        assert 0 < id1 < 2_000_000_000  # Safe INT range
 
-    def test_cinema_id_to_int_numeric(self):
-        """Numeric string IDs should convert to int."""
-        assert cinema_id_to_int("12345") == 12345
-        assert cinema_id_to_int("99999") == 99999
+    def test_generate_circuit_id_consistent(self):
+        """Same circuit should have same ID."""
+        id1 = generate_circuit_id("circuit-81002")
+        id2 = generate_circuit_id("circuit-81002")
+        assert id1 == id2
+        assert 0 < id1 < 100_000_000  # Circuit IDs stay in smaller range
 
-    def test_cinema_id_to_int_alphanumeric(self):
+    def test_cinema_id_to_int_is_alias_for_bigint(self):
+        """cinema_id_to_int should be an alias for cinema_id_to_bigint."""
+        test_id = "P3757"
+        assert cinema_id_to_int(test_id) == cinema_id_to_bigint(test_id)
+
+    def test_cinema_id_to_bigint_numeric(self):
+        """Numeric string IDs should convert directly."""
+        assert cinema_id_to_bigint("12345") == 12345
+        assert cinema_id_to_bigint("99999") == 99999
+
+    def test_cinema_id_to_bigint_large_numeric(self):
+        """Large numeric IDs that exceed INT range."""
+        large_id = "9876543210"  # Dépasse INT max (2,147,483,647)
+        result = cinema_id_to_bigint(large_id)
+        assert result == 9876543210
+        assert isinstance(result, int)
+
+    def test_cinema_id_to_bigint_alphanumeric(self):
         """Alphanumeric IDs should be hashed consistently."""
-        id1 = cinema_id_to_int("P3757")
-        id2 = cinema_id_to_int("P3757")
+        id1 = cinema_id_to_bigint("P3757")
+        id2 = cinema_id_to_bigint("P3757")
         assert id1 == id2
         assert isinstance(id1, int)
+        assert 0 < id1 < 9_000_000_000_000_000_000  # BIGINT range
+
+    def test_cinema_id_to_bigint_already_int(self):
+        """Already int values should be returned as-is."""
+        assert cinema_id_to_bigint(12345) == 12345
+        assert cinema_id_to_bigint(9876543210) == 9876543210
 
 
 class TestParseHelpers:

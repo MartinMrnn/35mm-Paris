@@ -126,96 +126,110 @@ class DataValidator:
     def check_orphaned_data(self):
         """Vérifie les données orphelines."""
         logger.info("Vérification des données orphelines...")
-        
+
         # 1. Récupérer tous les cinémas
         all_cinemas = supabase.table("cinemas").select("id, name").execute()
-        all_cinema_ids = {c['id'] for c in all_cinemas.data}
-        cinema_names = {c['id']: c['name'] for c in all_cinemas.data}
-        
+        all_cinema_ids = {c["id"] for c in all_cinemas.data}
+        cinema_names = {c["id"]: c["name"] for c in all_cinemas.data}
+
         # 2. Récupérer les cinémas qui ont au moins une séance
         # Utiliser une requête plus efficace avec distinct
         cinemas_with_screenings = set()
-        
+
         # Paginer pour récupérer tous les cinema_ids uniques
         page = 0
         while True:
             offset = page * 1000
             try:
                 # Select uniquement cinema_id pour optimiser
-                batch = supabase.table("screenings").select("cinema_id").range(offset, offset + 999).execute()
+                batch = (
+                    supabase.table("screenings")
+                    .select("cinema_id")
+                    .range(offset, offset + 999)
+                    .execute()
+                )
                 if not batch.data:
                     break
-                
+
                 # Ajouter les cinema_ids au set
                 for screening in batch.data:
-                    cinemas_with_screenings.add(screening['cinema_id'])
-                
+                    cinemas_with_screenings.add(screening["cinema_id"])
+
                 if len(batch.data) < 1000:
                     break
                 page += 1
-                
+
             except Exception as e:
                 logger.error(f"Erreur pagination: {e}")
                 break
-        
+
         # 3. Calculer les cinémas sans séances
         unused_cinemas = all_cinema_ids - cinemas_with_screenings
-        
+
         if unused_cinemas:
             # Log les noms des cinémas pour debug
-            unused_names = [cinema_names.get(cid, f"ID: {cid}") for cid in list(unused_cinemas)[:5]]
+            unused_names = [
+                cinema_names.get(cid, f"ID: {cid}") for cid in list(unused_cinemas)[:5]
+            ]
             logger.info(f"Exemples de cinémas sans séances: {unused_names}")
-            
+
             self.add_issue(
                 "UNUSED_CINEMAS",
                 f"{len(unused_cinemas)} cinémas n'ont aucune séance",
-                "WARNING"
+                "WARNING",
             )
-        
+
         # 4. Vérifier les références de films orphelines
         all_movie_ids = set()
-        
+
         # Récupérer tous les movie_ids référencés dans les séances
         page = 0
         while True:
             offset = page * 1000
             try:
-                batch = supabase.table("screenings").select("movie_id").range(offset, offset + 999).execute()
+                batch = (
+                    supabase.table("screenings")
+                    .select("movie_id")
+                    .range(offset, offset + 999)
+                    .execute()
+                )
                 if not batch.data:
                     break
-                
+
                 for screening in batch.data:
-                    all_movie_ids.add(screening['movie_id'])
-                
+                    all_movie_ids.add(screening["movie_id"])
+
                 if len(batch.data) < 1000:
                     break
                 page += 1
-                
+
             except Exception as e:
                 logger.error(f"Erreur pagination films: {e}")
                 break
-        
+
         # Récupérer tous les films existants
         movies = supabase.table("movies").select("id").execute()
-        valid_movie_ids = {m['id'] for m in movies.data}
-        
+        valid_movie_ids = {m["id"] for m in movies.data}
+
         orphaned_movie_refs = all_movie_ids - valid_movie_ids
         if orphaned_movie_refs:
             self.add_issue(
                 "ORPHANED_SCREENINGS",
                 f"{len(orphaned_movie_refs)} séances référencent des films inexistants",
-                "ERROR"
+                "ERROR",
             )
-        
+
         # Mettre à jour les stats
         self.stats["orphaned_movie_refs"] = len(orphaned_movie_refs)
         self.stats["unused_cinemas"] = len(unused_cinemas)
         self.stats["total_cinemas"] = len(all_cinema_ids)
         self.stats["cinemas_with_screenings"] = len(cinemas_with_screenings)
-        
-        logger.info(f"Stats cinémas: {len(all_cinema_ids)} total, "
-                    f"{len(cinemas_with_screenings)} avec séances, "
-                    f"{len(unused_cinemas)} sans séances")
+
+        logger.info(
+            f"Stats cinémas: {len(all_cinema_ids)} total, "
+            f"{len(cinemas_with_screenings)} avec séances, "
+            f"{len(unused_cinemas)} sans séances"
+        )
 
     def check_data_consistency(self):
         """Vérifie la cohérence des données."""

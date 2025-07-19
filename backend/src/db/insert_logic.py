@@ -1,6 +1,7 @@
 """
 Database insertion logic for 35mm Paris.
 Modern, type-safe, with proper error handling and bulk operations.
+Updated to support BIGINT for cinema IDs only.
 """
 
 import hashlib
@@ -67,7 +68,7 @@ def generate_movie_id(title: str, original_title: str, runtime: int = 0) -> int:
     if runtime > 0:
         hash_str += f"_{runtime}"
 
-    # Generate ID from hash
+    # Generate ID from hash - RETOUR À L'ORIGINAL
     hash_bytes = hashlib.sha256(hash_str.encode()).digest()
     return int.from_bytes(hash_bytes[:4], "big") % 100_000_000
 
@@ -80,18 +81,41 @@ def generate_director_id(first_name: str, last_name: str) -> int:
 
 
 def generate_circuit_id(circuit_code: str) -> int:
-    """Generate stable unique ID for a circuit."""
+    """Generate stable unique ID for a circuit within INT range."""
     normalized = circuit_code.strip().lower()
     hash_bytes = hashlib.sha256(normalized.encode()).digest()
-    return int.from_bytes(hash_bytes[:4], "big") % 100_000_000
+    return int.from_bytes(hash_bytes[:4], "big") % 100_000_000  # Comme avant
 
 
-def cinema_id_to_int(cinema_id: str) -> int:
-    """Convert string cinema ID to integer for database."""
+def cinema_id_to_bigint(cinema_id: str) -> int:
+    """
+    Convert string cinema ID to BIGINT for database.
+
+    Args:
+        cinema_id: Cinema ID from Allocine API
+
+    Returns:
+        BIGINT cinema ID
+    """
+    if isinstance(cinema_id, int):
+        return cinema_id
+
+    # If it's a numeric string, convert directly
     if cinema_id.isdigit():
         return int(cinema_id)
-    # Hash string ID to int
-    return int(hashlib.sha256(cinema_id.encode()).hexdigest()[:8], 16)
+
+    # For non-numeric IDs (like "P3757"), generate a stable BIGINT
+    # Use full hash range since we're using BIGINT
+    normalized = cinema_id.strip().lower()
+    hash_bytes = hashlib.sha256(normalized.encode()).digest()
+    # Use 8 bytes for BIGINT range
+    return (
+        int.from_bytes(hash_bytes[:8], "big") % 9_000_000_000_000_000_000
+    )  # Safe BIGINT range
+
+
+# Gardons l'ancien nom pour la compatibilité, mais il utilise BIGINT maintenant
+cinema_id_to_int = cinema_id_to_bigint
 
 
 def parse_directors(director_str: str | None) -> list[Director]:
@@ -147,7 +171,7 @@ def insert_cinema(cinema_data: dict, circuit_id: int | None = None) -> str | Non
 
     Args:
         cinema_data: Cinema data from API
-        circuit_id: Optional circuit ID if known
+        circuit_id: Optional circuit ID (INT) if known
 
     Returns:
         Cinema ID if inserted, None if error
@@ -158,25 +182,25 @@ def insert_cinema(cinema_data: dict, circuit_id: int | None = None) -> str | Non
             logger.error("Cinema without ID")
             return None
 
-        # Convert to int for database
-        cinema_id_int = cinema_id_to_int(cinema_id_str)
+        # Convert to BIGINT for database
+        cinema_id_bigint = cinema_id_to_bigint(cinema_id_str)
 
         # Check if exists
         response = (
-            supabase.table("cinemas").select("id").eq("id", cinema_id_int).execute()
+            supabase.table("cinemas").select("id").eq("id", cinema_id_bigint).execute()
         )
         if len(response.data) > 0:
             # Update circuit_id if provided and not already set
             if circuit_id:
                 supabase.table("cinemas").update({"circuit_id": circuit_id}).eq(
-                    "id", cinema_id_int
+                    "id", cinema_id_bigint
                 ).execute()
             logger.debug("Cinema already exists", cinema_id=cinema_id_str)
             return cinema_id_str
 
         # Prepare data
         data = {
-            "id": cinema_id_int,
+            "id": cinema_id_bigint,
             "name": cinema_data.get("name", "Unknown"),
             "address": cinema_data.get("address"),
             "city": cinema_data.get("city", "Paris"),
@@ -193,6 +217,7 @@ def insert_cinema(cinema_data: dict, circuit_id: int | None = None) -> str | Non
             "Inserted cinema",
             name=data["name"],
             cinema_id=cinema_id_str,
+            cinema_id_bigint=cinema_id_bigint,
             circuit_id=circuit_id,
         )
 
@@ -374,7 +399,7 @@ def bulk_insert_screenings(screenings_data: list[dict], cinema_id: str) -> int:
 
     Args:
         screenings_data: Liste des séances avec movie_id, date, time, version
-        cinema_id: ID du cinéma
+        cinema_id: ID du cinéma (string, sera converti en BIGINT)
 
     Returns:
         Nombre de séances insérées
@@ -382,7 +407,8 @@ def bulk_insert_screenings(screenings_data: list[dict], cinema_id: str) -> int:
     if not screenings_data:
         return 0
 
-    cinema_id_int = cinema_id_to_int(cinema_id)
+    # Convertir cinema_id en BIGINT
+    cinema_id_bigint = cinema_id_to_bigint(cinema_id)
 
     # Préparer les données
     screenings_to_insert = []
@@ -398,7 +424,7 @@ def bulk_insert_screenings(screenings_data: list[dict], cinema_id: str) -> int:
             screenings_to_insert.append(
                 {
                     "movie_id": screening["movie_id"],
-                    "cinema_id": cinema_id_int,
+                    "cinema_id": cinema_id_bigint,  # Utiliser le BIGINT
                     "date": screening["date"],
                     "starts_at": time_str,
                     "diffusion_version": screening.get(
@@ -523,7 +549,8 @@ __all__ = [
     "generate_circuit_id",
     "parse_directors",
     "parse_languages",
-    "cinema_id_to_int",
+    "cinema_id_to_int",  # Gardé pour compatibilité
+    "cinema_id_to_bigint",  # Nouvelle fonction
     "insert_cinema",
     "insert_release",
     "process_cinema_screenings",

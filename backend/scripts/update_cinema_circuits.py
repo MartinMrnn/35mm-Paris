@@ -2,6 +2,7 @@
 """
 Script optimisé pour créer les circuits et les associer aux cinémas.
 Utilise les fonctions existantes de insert_logic pour éviter la duplication.
+Mis à jour pour gérer correctement les IDs BIGINT des cinémas.
 Usage: python update_cinema_circuits.py [--dry-run]
 """
 import argparse
@@ -89,12 +90,13 @@ def insert_circuits_to_db(circuits_map: dict[str, dict]) -> bool:
 def map_cinemas_to_circuits(circuits_map: dict[str, dict]) -> dict[int, int]:
     """
     Crée un mapping cinema_id -> circuit_id en parcourant tous les circuits.
+    IMPORTANT: Utilise cinema_id_to_int pour convertir les IDs string en BIGINT.
 
     Args:
         circuits_map: Dict des circuits
 
     Returns:
-        Dict mapping cinema_id (int) -> circuit_id
+        Dict mapping cinema_id (BIGINT) -> circuit_id (INT)
     """
     api = allocineAPI()
     cinema_to_circuit = {}
@@ -112,8 +114,13 @@ def map_cinemas_to_circuits(circuits_map: dict[str, dict]) -> dict[int, int]:
 
             for cinema in cinemas:
                 cinema_id_str = cinema["id"]
-                cinema_id_int = cinema_id_to_int(cinema_id_str)
-                cinema_to_circuit[cinema_id_int] = circuit_id
+                # IMPORTANT: Convertir l'ID string en BIGINT
+                cinema_id_bigint = cinema_id_to_int(cinema_id_str)
+                cinema_to_circuit[cinema_id_bigint] = circuit_id
+
+                logger.debug(
+                    f"  Cinema {cinema_id_str} -> BIGINT {cinema_id_bigint} -> Circuit {circuit_id}"
+                )
 
             time.sleep(DELAY_BETWEEN_REQUESTS)
 
@@ -129,9 +136,10 @@ def update_cinemas_circuits(
 ) -> int:
     """
     Met à jour les circuit_id des cinémas.
+    Les IDs sont déjà en BIGINT depuis map_cinemas_to_circuits.
 
     Args:
-        cinema_to_circuit: Mapping cinema_id -> circuit_id
+        cinema_to_circuit: Mapping cinema_id (BIGINT) -> circuit_id (INT)
         dry_run: Si True, ne fait pas les updates
 
     Returns:
@@ -145,8 +153,24 @@ def update_cinemas_circuits(
     # Si dry run, juste afficher ce qui serait fait
     if dry_run:
         logger.info("🔍 Mode DRY RUN - Aucune modification ne sera faite")
-        for cinema_id, circuit_id in list(cinema_to_circuit.items())[:10]:
-            logger.info(f"  Cinema {cinema_id} → Circuit {circuit_id}")
+
+        # Récupérer quelques noms de cinémas pour l'affichage
+        sample_ids = list(cinema_to_circuit.keys())[:5]
+        if sample_ids:
+            cinemas_info = (
+                supabase.table("cinemas")
+                .select("id, name")
+                .in_("id", sample_ids)
+                .execute()
+            )
+            cinema_names = {c["id"]: c["name"] for c in cinemas_info.data}
+
+            for cinema_id, circuit_id in list(cinema_to_circuit.items())[:10]:
+                cinema_name = cinema_names.get(cinema_id, "Unknown")
+                logger.info(
+                    f"  Cinema {cinema_name} (ID: {cinema_id}) → Circuit {circuit_id}"
+                )
+
         if len(cinema_to_circuit) > 10:
             logger.info(f"  ... et {len(cinema_to_circuit) - 10} autres")
         return len(cinema_to_circuit)
@@ -211,7 +235,7 @@ def generate_statistics() -> None:
         for stat in circuit_stats:
             logger.info(f"  - {stat['name']}: {stat['count']} cinémas")
 
-        # Cinémas indépendants
+        # Cinémas indépendants (sans circuit)
         independents = (
             supabase.table("cinemas")
             .select("id, name")
@@ -222,7 +246,7 @@ def generate_statistics() -> None:
         if independents.data:
             logger.info(f"\nCinémas indépendants: {len(independents.data)}")
             for cinema in independents.data[:5]:
-                logger.info(f"  - {cinema['name']}")
+                logger.info(f"  - {cinema['name']} (ID: {cinema['id']})")
             if len(independents.data) > 5:
                 logger.info(f"  ... et {len(independents.data) - 5} autres")
 

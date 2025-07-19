@@ -1,73 +1,103 @@
-create table movies (
-    id int primary key,
-    title text not null,
-    original_title text,
-    synopsis text,
-    poster_url text,
-    runtime int,
-    has_dvd_release boolean default false,
-    is_premiere boolean default false,
-    weekly_outing boolean default false
+-- Tables pour la base de données 35mm-paris
+-- Mise à jour avec BIGINT pour les IDs de cinemas uniquement
+
+-- Table des films
+CREATE TABLE movies (
+    id INT PRIMARY KEY,
+    title TEXT NOT NULL,
+    original_title TEXT,
+    synopsis TEXT,
+    poster_url TEXT,
+    runtime INT,
+    has_dvd_release BOOLEAN DEFAULT FALSE,
+    is_premiere BOOLEAN DEFAULT FALSE,
+    weekly_outing BOOLEAN DEFAULT FALSE
 );
 
-create table directors (
-    id serial primary key,
-    first_name text,
-    last_name text,
-    unique (first_name, last_name)
+-- Table des réalisateurs
+CREATE TABLE directors (
+    id INT PRIMARY KEY,  -- Changé de SERIAL à INT pour utiliser nos IDs générés
+    first_name TEXT,
+    last_name TEXT,
+    UNIQUE (first_name, last_name)
 );
 
-create table movie_directors (
-    movie_id int references movies(id) on delete cascade,
-    director_id int references directors(id) on delete cascade,
-    primary key (movie_id, director_id)
+-- Table de liaison films-réalisateurs
+CREATE TABLE movie_directors (
+    movie_id INT REFERENCES movies(id) ON DELETE CASCADE,
+    director_id INT REFERENCES directors(id) ON DELETE CASCADE,
+    PRIMARY KEY (movie_id, director_id)
 );
 
-create table languages (
-    code text primary key,
-    label text
+-- Table des langues
+CREATE TABLE languages (
+    code TEXT PRIMARY KEY,
+    label TEXT
 );
 
-create table movie_languages (
-    movie_id int references movies(id) on delete cascade,
-    code text references languages(code) on delete cascade,
-    primary key (movie_id, code)
+-- Table de liaison films-langues
+CREATE TABLE movie_languages (
+    movie_id INT REFERENCES movies(id) ON DELETE CASCADE,
+    code TEXT REFERENCES languages(code) ON DELETE CASCADE,
+    PRIMARY KEY (movie_id, code)
 );
 
-create table releases (
-    id serial primary key,
-    movie_id int references movies(id) on delete cascade,
-    release_name text,
-    release_date date,
+-- Table des dates de sortie
+CREATE TABLE releases (
+    id SERIAL PRIMARY KEY,
+    movie_id INT REFERENCES movies(id) ON DELETE CASCADE,
+    release_name TEXT,
+    release_date DATE,
     CONSTRAINT unique_release UNIQUE (movie_id, release_date)
 );
 
-create table cinemas (
-    id text primary key,
-    name text,
-    address text,
-    city text,
-    zipcode text,
-    circuit_id int
-);
-
-create table screenings (
-    id serial primary key,
-    movie_id int references movies(id) on delete cascade,
-    cinema_id text references cinemas(id) on delete cascade,
-    date date not null,
-    starts_at time,
-    diffusion_version text,
-    constraint unique_screening unique (movie_id, cinema_id, date, starts_at)
-);
-
+-- Table des circuits de cinéma
 CREATE TABLE circuits (
-    id INT PRIMARY KEY,
+    id INT PRIMARY KEY,         -- INT comme avant
     code TEXT UNIQUE NOT NULL,  -- ex: "circuit-81002"
     name TEXT NOT NULL          -- ex: "Pathé Cinémas"
 );
 
-create index idx_screenings_date on screenings(date);
-create index idx_screenings_cinema on screenings(cinema_id);
-create index idx_screenings_movie on screenings(movie_id);
+-- Table des cinémas
+CREATE TABLE cinemas (
+    id BIGINT PRIMARY KEY,      -- BIGINT pour supporter les grands IDs générés
+    name TEXT NOT NULL,
+    address TEXT,
+    city TEXT,
+    zipcode TEXT,
+    circuit_id INT REFERENCES circuits(id)  -- INT car circuits.id est INT
+);
+
+-- Table des séances
+CREATE TABLE screenings (
+    id SERIAL PRIMARY KEY,
+    movie_id INT REFERENCES movies(id) ON DELETE CASCADE,
+    cinema_id BIGINT REFERENCES cinemas(id) ON DELETE CASCADE,  -- BIGINT pour correspondre à cinemas.id
+    date DATE NOT NULL,
+    starts_at TIME,
+    diffusion_version TEXT,
+    CONSTRAINT unique_screening UNIQUE (movie_id, cinema_id, date, starts_at)
+);
+
+-- Index pour améliorer les performances
+CREATE INDEX idx_screenings_date ON screenings(date);
+CREATE INDEX idx_screenings_cinema ON screenings(cinema_id);
+CREATE INDEX idx_screenings_movie ON screenings(movie_id);
 CREATE INDEX idx_cinemas_circuit ON cinemas(circuit_id);
+CREATE INDEX idx_cinemas_city ON cinemas(city);
+CREATE INDEX idx_cinemas_zipcode ON cinemas(zipcode);
+
+-- Index composites pour les requêtes fréquentes
+CREATE INDEX idx_screenings_cinema_date ON screenings(cinema_id, date);
+CREATE INDEX idx_screenings_movie_date ON screenings(movie_id, date);
+
+-- Commentaires pour documentation
+COMMENT ON TABLE movies IS 'Films diffusés dans les cinémas parisiens';
+COMMENT ON TABLE cinemas IS 'Cinémas de Paris et leur circuit';
+COMMENT ON TABLE screenings IS 'Séances de films dans les cinémas';
+COMMENT ON TABLE circuits IS 'Circuits de cinéma (UGC, Pathé, MK2, etc.)';
+
+COMMENT ON COLUMN cinemas.id IS 'ID unique du cinéma (BIGINT généré depuis l''ID Allocine)';
+COMMENT ON COLUMN cinemas.circuit_id IS 'Référence vers le circuit du cinéma (NULL pour les indépendants)';
+COMMENT ON COLUMN screenings.diffusion_version IS 'Version de diffusion (VF, VOST, etc.)';
+COMMENT ON COLUMN directors.id IS 'ID généré par hash du nom complet';

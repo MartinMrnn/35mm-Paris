@@ -2,8 +2,9 @@
 Data models for 35mm Paris.
 Simple Pydantic models for data validation.
 """
+from typing import Any, Dict
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, ValidationInfo
 
 
 class MovieData(BaseModel):
@@ -24,14 +25,14 @@ class MovieData(BaseModel):
 
     @field_validator("title")
     @classmethod
-    def title_not_empty(cls, v):
+    def title_not_empty(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Title cannot be empty")
         return v.strip()
 
     @field_validator("originalTitle", mode="before")
     @classmethod
-    def original_title_default(cls, v, info):
+    def original_title_default(cls, v: Any, info: ValidationInfo) -> Any:
         """If no original title, use the main title."""
         if not v:
             return info.data.get("title", "")
@@ -46,7 +47,7 @@ class Director(BaseModel):
 
     @field_validator("first_name", "last_name")
     @classmethod
-    def names_not_empty(cls, v):
+    def names_not_empty(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Name cannot be empty")
         return v.strip()
@@ -60,7 +61,7 @@ class Language(BaseModel):
 
     @field_validator("label", mode="before")
     @classmethod
-    def label_default(cls, v, info):
+    def label_default(cls, v: Any, info: ValidationInfo) -> Any:
         """If no label, use code as label."""
         return v or info.data.get("code", "")
 
