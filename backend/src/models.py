@@ -2,9 +2,10 @@
 Data models for 35mm Paris.
 Simple Pydantic models for data validation.
 """
-from typing import Any, Dict
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, ValidationInfo
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 class MovieData(BaseModel):
@@ -69,7 +70,7 @@ class Language(BaseModel):
 class Cinema(BaseModel):
     """Cinema information."""
 
-    id: str
+    id: int
     name: str
     address: str | None = None
     city: str | None = None
@@ -80,7 +81,7 @@ class Screening(BaseModel):
     """Movie screening information."""
 
     movie_id: int
-    cinema_id: str
+    cinema_id: int
     date: str  # Format: YYYY-MM-DD
     starts_at: str | None = None  # Format: HH:MM
     version: str | None = Field(None, alias="diffusion_version")
