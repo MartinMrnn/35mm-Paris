@@ -5,7 +5,6 @@ Uses Pydantic for validation and environment variable management.
 
 from functools import lru_cache
 import os
-from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -37,13 +36,7 @@ class Settings(BaseSettings):
     log_format: str = Field(default="json", description="Log format (json or text)")
 
     model_config = SettingsConfigDict(
-        # Chercher le .env dans le dossier parent du projet
-        # Path(__file__) = settings.py
-        # .parent = config/
-        # .parent = src/
-        # .parent = backend/
-        # .parent = 35mm-Paris/
-        env_file=Path(__file__).parent.parent.parent.parent / ".env",
+        env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         # This allows SUPABASE_URL to map to supabase_url

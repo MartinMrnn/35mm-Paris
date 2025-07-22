@@ -1,44 +1,46 @@
 ============================================================
 RAPPORT DE VALIDATION DES DONNÉES - 35mm Paris
 ============================================================
-Date: 2025-07-19 11:06:20
+Date: 2025-07-22 18:31:09
 
 STATISTIQUES
 ------------------------------
 Cinemas No Address......................          0
 Cinemas No Zipcode......................          0
-Cinemas With Screenings.................         70
+Cinemas With Screenings.................         71
 Duplicate Movies........................          0
 Duplicate Screenings....................          0
-Empty Circuits..........................          8
+Empty Circuits..........................          4
 Future Screenings.......................          0
 Invalid Circuit Refs....................          0
-Movies No Language Approx...............        146
+Movies No Language Approx...............        195
 Movies No Poster........................          0
 Movies No Synopsis......................          0
-Movies Without Directors................          4
-Old Screenings..........................          0
+Movies Without Directors................          8
+Old Screenings..........................       3772
 Orphaned Movie Refs.....................          0
 Total Cinemas...........................        106
 Total Circuits..........................          8
-Total Movies............................        394
-Unused Cinemas..........................         36
+Total Movies............................        529
+Unused Cinemas..........................         35
 
-⚠️  AVERTISSEMENTS (1)
+⚠️  AVERTISSEMENTS (2)
 ------------------------------
-[UNUSED_CINEMAS] 36 cinémas n'ont aucune séance
+[UNUSED_CINEMAS] 35 cinémas n'ont aucune séance
+[OLD_SCREENINGS] 3772 séances dans le passé - considérer un nettoyage avec --clean
 
 ℹ️  INFORMATIONS (3)
 ------------------------------
-[MISSING_DIRECTORS] 4 films sans réalisateur (ex: Rex Studios)
-[EMPTY_CIRCUITS] 8 circuits sans cinémas: Pathé Cinémas, CGR, UGC...
-[MISSING_LANGUAGES] Environ 146 films sans information de langue
+[MISSING_DIRECTORS] 8 films sans réalisateur (ex: Rex Studios)
+[EMPTY_CIRCUITS] 4 circuits sans cinémas: Megarama, Cinéligue Champagne-Ardennes, Artec cinémas...
+[MISSING_LANGUAGES] Environ 195 films sans information de langue
 
 RÉSUMÉ ET RECOMMANDATIONS
 ------------------------------
 ✅ Aucune erreur critique
-⚠️  1 avertissements à surveiller
+⚠️  2 avertissements à surveiller
+   → Lancer 'python import_paris.py --clean' pour nettoyer les vieilles séances
 
-Total: 4 problèmes détectés
+Total: 5 problèmes détectés
 
 📊 Score de qualité des données: 100%
